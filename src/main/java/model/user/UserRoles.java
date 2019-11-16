@@ -1,5 +1,5 @@
 package model.user;
 
-public class UserRoles {
-
+public enum UserRoles {
+    ADMIN, PASSENGER
 }
