@@ -1,4 +1,6 @@
-package security.form;
+package security.api;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -10,6 +12,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -23,29 +26,28 @@ import java.util.List;
 import static security.SecurityConstants.*;
 
 
-public class FormBasedJWTAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
+public class ApiJWTAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
     private AuthenticationManager authenticationManager;
 
-    public FormBasedJWTAuthenticationFilter(AuthenticationManager authenticationManager) {
+    public ApiJWTAuthenticationFilter(AuthenticationManager authenticationManager) {
         this.authenticationManager = authenticationManager;
+        this.setRequiresAuthenticationRequestMatcher(new AntPathRequestMatcher("/api/auth", "POST"));
     }
 
     @Override
     public Authentication attemptAuthentication(HttpServletRequest req,
                                                 HttpServletResponse res) throws AuthenticationException {
-        String email = req.getParameter("email");
-        String password = req.getParameter("password");
-        if (email != null && password != null) {
-            User user = new User().setEmail(email).setPassword(password);
+        try {
+            User user = new ObjectMapper().readValue(req.getInputStream(), User.class);
             return authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             user.getEmail(),
                             user.getPassword(),
                             new ArrayList<>())
             );
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-
-        return null;
     }
 
     @Override
@@ -54,23 +56,17 @@ public class FormBasedJWTAuthenticationFilter extends UsernamePasswordAuthentica
                                             FilterChain chain,
                                             Authentication auth) throws IOException, ServletException {
         if (auth.getPrincipal() != null) {
-            // The Auth Mechanism stores the Username the Principal.
-            // The username is stored in the Subject field of the Token
             org.springframework.security.core.userdetails.User user = (org.springframework.security.core.userdetails.User) auth.getPrincipal();
             String login = user.getUsername();
             if (login != null && login.length() > 0) {
                 Claims claims = Jwts.claims().setSubject(login);
                 List<String> roles = new ArrayList<>();
-                user
-                        .getAuthorities()
-                        .stream()
-                        .forEach(authority -> roles.add(authority.getAuthority()));
-
+                user.getAuthorities().stream().forEach(authority -> roles.add(authority.getAuthority()));
                 claims.put("roles", roles);
                 String token = Jwts.builder()
                         .setClaims(claims)
                         .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                        .signWith(SignatureAlgorithm.HS512, SECRET.getBytes())
+                        .signWith(SignatureAlgorithm.HS512, SECRET)
                         .compact();
                 res.addHeader(HEADER_STRING, TOKEN_PREFIX + token);
             }
