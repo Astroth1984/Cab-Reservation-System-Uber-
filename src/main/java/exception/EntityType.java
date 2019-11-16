@@ -1,5 +1,12 @@
 package exception;
 
-public class EntityType {
-
+public enum EntityType {
+    USER,
+    ROLE,
+    AGENCY,
+    BUS,
+    STOP,
+    TICKET,
+    TRIP,
+    TRIPSCHEDULE
 }
